@@ -1,0 +1,29 @@
+{
+    "id": "movable-squares",
+    "title": "Movable Squares",
+    "description": "Highlight squares tokens are able to move to.",
+    "authors": [
+        {
+            "name": "Tero Parvinen (Whistler#3253)"
+        }
+    ],
+    "version": "10.0",
+    "compatibility": {
+        "minimum": 10,
+        "verified": 10
+    },
+    "esmodules": [
+        "./module/movable-squares.js"
+    ],
+    "languages": [
+        {
+            "lang": "en",
+            "name": "English",
+            "path": "./lang/en.json"
+        }
+    ],
+    "url": "https://github.com/teroparvinen/foundry-movable-squares",
+    "bugs": "https://github.com/teroparvinen/foundry-movable-squares/issues",
+    "manifest": "https://github.com/teroparvinen/foundry-movable-squares/releases/latest/download/module.json",
+    "download": "https://github.com/teroparvinen/foundry-movable-squares/releases/latest/download/module.zip"
+}

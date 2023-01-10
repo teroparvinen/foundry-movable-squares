@@ -1,0 +1,18 @@
+{
+    "movable-squares": {
+        "keybinding-highlight": "Highlight movable squares",
+        "setting-step-count": "Number of square steps to check",
+        "setting-highlight-color": "Highlight color",
+        "setting-movement-limit": "Limit to available character movement",
+        "setting-fade-target": "Fade highlight with distance",
+        "setting-color-white": "White",
+        "setting-color-red": "Red",
+        "setting-color-yellow": "Yellow",
+        "setting-color-orange": "Orange",
+        "setting-color-green": "Green",
+        "setting-color-cyan": "Cyan",
+        "setting-color-blue": "Blue",
+        "setting-color-purple": "Purple"
+
+    }
+}
