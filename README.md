@@ -20,3 +20,10 @@ The highlight calculation is pretty computation intensive and I made some effort
 
 GMs should try this out on previously created scenes before adopting it for their game. There is very little in the regular module selection that would make the players
 able to see some wall structures, e.g. some placed temporarily to not allow the PCs to move to a location tied to an event or some piece of narration. The highlight created by this module will give those things away if the players see the movable area end where they clearly have vision beyond.
+
+## Extras
+
+A couple of extra features crept into the module. These aren't bound by default because they are slightly experimental, but can be activated in keybindings.
+
+- Keeping an optional hot key pressed, moving the mouse over the canvas measures the distance from the selected token to the mouse position, and shows the result over the grid. This is useful for casting long range spells or ranged attacks when drawing long rulers can get cumbersome and the texts hard to read.
+- Keeping an optional hot key pressed, you can operate the normal movement ruler (that normally requires ctrl/cmd-dragging the token) from the active token by just clicking to add waypoints and pressing space to move. The right mouse button removes the last placed waypoint (if the hot key is still down).

@@ -1,6 +1,8 @@
 {
     "movable-squares": {
         "keybinding-highlight": "Highlight movable squares",
+        "keybinding-quick-range-finder": "Quick measure range",
+        "keybinding-quick-waypoint": "Quick waypoint",
         "setting-step-count": "Number of square steps to check",
         "setting-highlight-color": "Highlight color",
         "setting-movement-limit": "Limit to available character movement",

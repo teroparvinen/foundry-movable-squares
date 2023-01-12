@@ -1,3 +1,5 @@
+import { endRanges, startRanges } from "./extra-range.js";
+import { endWaypoints, startWaypoints } from "./extra-waypoint.js";
 
 Hooks.on("init", () => {
     game.keybindings.register("movable-squares", "highlight", {
@@ -10,6 +12,28 @@ Hooks.on("init", () => {
         },
         onUp: (ctx) => {
             releaseHighlight();
+        }
+    });
+    game.keybindings.register("movable-squares", "range-finder", {
+        name: "movable-squares.keybinding-quick-range-finder",
+        editable: [
+        ],
+        onDown: (ctx) => {
+            startRanges();
+        },
+        onUp: (ctx) => {
+            endRanges();
+        }
+    });
+    game.keybindings.register("movable-squares", "waypoint", {
+        name: "movable-squares.keybinding-quick-waypoint",
+        editable: [
+        ],
+        onDown: (ctx) => {
+            startWaypoints();
+        },
+        onUp: (ctx) => {
+            endWaypoints();
         }
     });
 
@@ -90,6 +114,8 @@ const colors = {
 let maxSteps = 15;
 let fadeTarget = 0.8;
 let color = 0xffffff;
+let useMovementLimit = true;
+let showDistance = true;
 
 let destinationDistances = {};
 let uiText = null;
@@ -133,7 +159,7 @@ function shortestLinkDistance(links) {
             path = l;
         }
     }
-    return { dist, path };
+    return dist ? { dist, path } : undefined;
 }
 
 const handlers = {}
@@ -162,8 +188,8 @@ function handleMouseMove(event) {
     if (rec) {
         const distance = rec.dist * canvas.scene.grid.distance;
 
-        if (game.system.id !== "dnd5e" || !game.settings.get("movable-squares", "movement-limit") || distance <= maxSpeed(this, false)) {
-            if (game.settings.get("movable-squares", "show-distance")) {
+        if (game.system.id !== "dnd5e" || !useMovementLimit || distance <= maxSpeed(this, false)) {
+            if (showDistance) {
                 const units = canvas.scene.grid.units;
                 const label = `${Math.round(distance * 100) / 100} ${units}`;
                 uiText = canvas.interface.addChild(new PIXI.Text(label, CONFIG.canvasTextStyle));
@@ -197,9 +223,11 @@ async function highlightSquares(token) {
     maxSteps = game.settings.get("movable-squares", "step-count") + 1;
     fadeTarget = game.settings.get("movable-squares", "fade-target");
     color = colors[game.settings.get("movable-squares", "highlight-color")] || colors.white;
+    useMovementLimit = game.settings.get("movable-squares", "movement-limit");
+    showDistance = game.settings.get("movable-squares", "show-distance");
 
     let steps = maxSteps;
-    if (game.system.id === "dnd5e" && game.settings.get("movable-squares", "movement-limit")) {
+    if (game.system.id === "dnd5e" && useMovementLimit) {
         const speed = maxSpeed(token);
         steps = speed + 1;
     }
@@ -310,7 +338,8 @@ function extendPositions(pos, visited, links, token) {
             const sourceLinks = links[oldKey] || null;
             const stepLinks = sourceLinks ? sourceLinks.filter(l => !l.some(e => e.x === p.x && e.y === p.y)).map(l => [p, ...l]) : [[p, pos]];
             const targetLinks = links[newKey] || [];
-            links[newKey] = [...targetLinks, ...stepLinks];
+            const shortest = shortestLinkDistance([...targetLinks, ...stepLinks]);
+            links[newKey] = shortest ? [shortest.path] : [];
         }
     });
     return unvisited;
