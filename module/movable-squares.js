@@ -34,6 +34,15 @@ Hooks.on("init", () => {
             default: true
         });
     }
+    if (game.system.id === "dnd5e") {
+        game.settings.register("movable-squares", "show-distance", {
+            name: "movable-squares.setting-show-distance",
+            scope: "client",
+            config: true,
+            type: Boolean,
+            default: true
+        });
+    }
     game.settings.register("movable-squares", "fade-target", {
         name: "movable-squares.setting-fade-target",
         scope: "client",
@@ -82,6 +91,105 @@ let maxSteps = 15;
 let fadeTarget = 0.8;
 let color = 0xffffff;
 
+let destinationDistances = {};
+let uiText = null;
+let currentPath;
+
+function linkDistance(links) {
+    let straight = 0;
+    let diagonal = 0;
+
+    for (let i = 0; i < links.length - 1; i++) {
+        const a = links[i];
+        const b = links[i+1];
+        if (a.x === b.x || a.y === b.y) {
+            straight++;
+        } else {
+            diagonal++;
+        }
+    }
+
+    if (game.system.id === "dnd5e") {
+        const mode = game.settings.get("dnd5e", "diagonalMovement");
+        if (mode === "5105") {
+            let nd10 = Math.floor(diagonal / 2);
+            return (nd10 * 2) + (diagonal - nd10) + straight;
+        } else if (mode === "EUCL") {
+            return straight + diagonal * 0.707;
+        }
+    }
+
+    return straight + diagonal;
+}
+
+function shortestLinkDistance(links) {
+    if (!links) { return; }
+
+    let dist, path;
+    for (const l of links) {
+        const d = linkDistance(l);
+        if (dist === undefined || d < dist) {
+            dist = d;
+            path = l;
+        }
+    }
+    return { dist, path };
+}
+
+const handlers = {}
+
+const updateRuler = debounce((path) => {
+    canvas.controls.ruler.clear();
+    canvas.controls.ruler.destination = { x: undefined, y: undefined };
+    if (path) {
+        canvas.controls.ruler.waypoints = path.slice(1).reverse();
+        canvas.controls.ruler.measure(path[0]);
+    }
+}, 100);
+
+function handleMouseMove(event) {
+    const gs = canvas.grid.size;
+    const hs = gs * 0.5;
+    const center = event.data.getLocalPosition(canvas.templates);
+    const snapped = canvas.grid.getSnappedPosition(center.x - hs, center.y - hs, 1);
+    const pos = { x: snapped.x + hs, y: snapped.y + hs };
+    
+    const rec = destinationDistances[`${pos.x}.${pos.y}`];
+
+    uiText?.destroy();
+    uiText = null;
+
+    if (rec) {
+        const distance = rec.dist * canvas.scene.grid.distance;
+
+        if (game.system.id !== "dnd5e" || !game.settings.get("movable-squares", "movement-limit") || distance <= maxSpeed(this, false)) {
+            if (game.settings.get("movable-squares", "show-distance")) {
+                const units = canvas.scene.grid.units;
+                const label = `${Math.round(distance * 100) / 100} ${units}`;
+                uiText = canvas.interface.addChild(new PIXI.Text(label, CONFIG.canvasTextStyle));
+                uiText.position.set(pos.x - uiText.width * 0.5, pos.y - uiText.height * 0.5);
+            }
+
+            currentPath = rec.path;
+        } else {
+            currentPath = undefined;
+        }
+    } else {
+        currentPath = undefined;
+    }
+}
+
+function handleMouseClick() {
+    updateRuler(currentPath);
+}
+
+function maxSpeed(token, inSquares = true) {
+    const movement = token.actor?.system.attributes.movement;
+    const speeds = Object.keys(CONFIG.DND5E.movementTypes).map(k => movement[k]).filter(m => m);
+    const divider = inSquares ? canvas.dimensions.distance : 1;
+    return (Math.max(...speeds) || 0) / divider;
+}
+
 async function highlightSquares(token) {
     if (canvas.grid.type !== CONST.GRID_TYPES.SQUARE) { return }
     if (!token || token.document.width != 1 || token.document.height != 1) { return }
@@ -92,16 +200,15 @@ async function highlightSquares(token) {
 
     let steps = maxSteps;
     if (game.system.id === "dnd5e" && game.settings.get("movable-squares", "movement-limit")) {
-        const movement = token.actor?.system.attributes.movement;
-        const speeds = Object.keys(CONFIG.DND5E.movementTypes).map(k => movement[k]).filter(m => m);
-        const speed = (Math.max(...speeds) || 0) / canvas.dimensions.distance;
+        const speed = maxSpeed(token);
         steps = speed + 1;
     }
 
     const gs = canvas.grid.size;
 
     const visitedSet = new Set([`${token.center.x}.${token.center.y}`]);
-    let candidates = extendPositions(token.center, visitedSet, token);
+    const links = {};
+    let candidates = extendPositions(token.center, visitedSet, links, token);
     let step = 1;
 
     let matching = [];
@@ -122,13 +229,32 @@ async function highlightSquares(token) {
         doHighlight(step, matching, token, alpha);
         await delay(30);
 
-        candidates = [...delegated, ...matching.flatMap(c => extendPositions(c, visitedSet, token))];
+        candidates = [...delegated, ...matching.flatMap(c => extendPositions(c, visitedSet, links, token))];
 
         step++;
     }
+
+    destinationDistances = {}
+    for (const key in links) {
+        const keyLinks = links[key];
+        destinationDistances[key] = shortestLinkDistance(keyLinks);
+    }
+
+    handlers.mm = handleMouseMove.bind(token);
+    handlers.lc = handleMouseClick;
+
+    canvas.stage.on("mousemove", handlers.mm);
+    canvas.stage.on("mousedown", handlers.lc);
 }
 
 async function releaseHighlight() {
+    canvas.stage.off("mousemove", handlers.mm);
+    canvas.stage.off("mousedown", handlers.lc);
+    uiText?.destroy();
+    uiText = null;
+
+    destinationDistances = {};
+
     for (let i = 1; i < maxSteps+1; i++) {
         const layerName = `movable-squares-${i}`;
         canvas.grid.destroyHighlightLayer(layerName);
@@ -149,7 +275,7 @@ async function doHighlight(step, positions, token, alpha) {
     await delay(300);
 }
 
-function extendPositions(pos, visited, token) {
+function extendPositions(pos, visited, links, token) {
     const dims = canvas.dimensions;
     
     const adj = [
@@ -163,17 +289,31 @@ function extendPositions(pos, visited, token) {
         { x: pos.x + dims.size, y: pos.y + dims.size }
     ];
     const isSceneLit = !canvas.scene.tokenVision || (canvas.scene.globalLight && canvas.scene.darkness < 1);
-    const res = adj.filter(p => {
-        const isInsideScene = p.x >= 0 && p.x < dims.width && p.y >= 0 && p.y < dims.height;
+    const inScene = adj.filter(p => p.x >= 0 && p.x < dims.width && p.y >= 0 && p.y < dims.height);
+    const unvisited = inScene.filter(p => {
         const isVisited = visited.has(`${p.x}.${p.y}`);
-        const isMoveBlocked = CONFIG.Canvas.losBackend.testCollision(pos, p, { mode: "any", type: "move", source: token.document });
-        const isVisionBlocked = CONFIG.Canvas.losBackend.testCollision(token.center, p, { mode: "any", type: "sight", source: token.document });
-        const isDestinationVisible = canvas.effects.visibility.testVisibility(p, { tolerance: dims.size * 0.25 });
-
-        return isInsideScene && !isVisited && !isMoveBlocked && (!token.hasSight || (!isVisionBlocked && (isSceneLit || isDestinationVisible)));
+        if (!isVisited) {
+            const isMoveBlocked = CONFIG.Canvas.losBackend.testCollision(pos, p, { mode: "any", type: "move", source: token.document });
+            const isVisionBlocked = CONFIG.Canvas.losBackend.testCollision(token.center, p, { mode: "any", type: "sight", source: token.document });
+            const isDestinationVisible = canvas.effects.visibility.testVisibility(p, { tolerance: dims.size * 0.25 });
+    
+            return !isMoveBlocked && (!token.hasSight || (!isVisionBlocked && (isSceneLit || isDestinationVisible)));
+        }
     });
-    res.forEach(r => visited.add(`${r.x}.${r.y}`));
-    return res;
+    unvisited.forEach(p => {
+        visited.add(`${p.x}.${p.y}`);
+    });
+    inScene.forEach(p => {
+        const oldKey = `${pos.x}.${pos.y}`;
+        const newKey = `${p.x}.${p.y}`;
+        if (visited.has(newKey)) {
+            const sourceLinks = links[oldKey] || null;
+            const stepLinks = sourceLinks ? sourceLinks.filter(l => !l.some(e => e.x === p.x && e.y === p.y)).map(l => [p, ...l]) : [[p, pos]];
+            const targetLinks = links[newKey] || [];
+            links[newKey] = [...targetLinks, ...stepLinks];
+        }
+    });
+    return unvisited;
 }
 
 async function delay(ms) {
